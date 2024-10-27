@@ -5,7 +5,7 @@ VisualStudioVersion = 17.11.35222.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FullStackServerlessBlazorApp", "FullStackServerlessBlazorApp.csproj", "{3CE1895F-F0E8-4A60-A897-FC6BAB94D6DE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlazorBackend", "..\BlazorBackend\BlazorBackend.csproj", "{31FEFDCC-D969-4644-9722-80E988A15D0A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlazorBackend", "BlazorBackend\BlazorBackend.csproj", "{31FEFDCC-D969-4644-9722-80E988A15D0A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

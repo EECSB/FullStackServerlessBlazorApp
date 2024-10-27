@@ -1,0 +1,208 @@
+﻿@page "/"
+
+@inject IJSRuntime JSRuntime
+@inject HttpClient client
+@inject NavigationManager NavigationManager
+
+@using System.Net.Http;
+@using System.Text.Json;
+@using System.IO;
+@using System.Text;
+
+
+<PageTitle>Files</PageTitle>
+
+<div style="margin-bottom: 30px;">
+    <h4>Files Space ID</h4>
+    <input type="text" @onchange="fileSpaceChanged" value="@fileSpace"></input><button @onclick="() => copyToClipboard(fileSpace)">Copy File Space ID</button>
+</div>
+
+<div style="margin-bottom: 30px;">
+    <h4>Upload File</h4>
+    <InputFile OnChange="onFileChanged" multiple></InputFile>
+</div>
+
+<div style="border: solid 1px black;">
+    <ul style="margin: 0;">
+        @if (files.Count() == 0)
+        {
+            <li>no files yet</li>
+        }
+
+        @foreach (var file in files)
+        {
+            <li>
+                <div>
+                    <span>@file.Name</span>
+                    <button @onclick="() => downloadFile(file)">Download</button>
+                    <button @onclick="() => deleteFile(file)">Delete</button>
+                    <button @onclick="() => copyToClipboard(file.Link)">Copy Link</button>
+                    <span>@file.TimeStamp.ToShortDateString() @file.TimeStamp.ToShortTimeString()</span>
+                </div>
+            </li>
+        }
+    </ul>   
+</div>
+
+@code 
+{
+    #region Variables ///////////////////////////////////////////////////////////////
+
+    private string fileSpace = "";
+    List<CloudFile> files = new List<CloudFile>();
+
+    #endregion //////////////////////////////////////////////////////////////////////
+
+
+    #region Models ///////////////////////////////////////////////////////////////////
+
+    class CloudFile
+    {
+        public CloudFile(string name, string fileSpace, string fileID, DateTime timeStamp, string link)
+        {
+            Name = name;
+            FileSpace = fileSpace;
+            FileID = fileID;
+            TimeStamp = timeStamp;
+            Link = link;
+        }
+
+        public string Name { get; set; }
+        public string FileSpace { get; set; }
+        public string FileID { get; set; }
+        public DateTime TimeStamp { get; set; }
+        public string Link { get; set; }
+    }
+
+    #endregion ///////////////////////////////////////////////////////////////////////
+
+
+    #region Initialization //////////////////////////////////////////////////////////
+
+    protected override async Task OnInitializedAsync()
+    {
+        fileSpace = Guid.NewGuid().ToString();
+    }
+
+    #endregion //////////////////////////////////////////////////////////////////////
+
+
+    #region Events //////////////////////////////////////////////////////////////////
+
+    private async Task downloadFile(CloudFile file)
+    {
+        byte[] downloadFile = await client.GetByteArrayAsync(file.Link);
+
+        await JSRuntime.InvokeVoidAsync("DownloadFile", file.Name, "application/octet-stream", downloadFile);
+    }
+
+    private async Task deleteFile(CloudFile file)
+    {
+        await deleteBlobFile(file.FileID);
+    }
+
+    private async Task onFileChanged(InputFileChangeEventArgs e)
+    {
+        using (var ms = new MemoryStream())
+        {
+            //Foreach file in the selected files
+            foreach (var file in e.GetMultipleFiles(e.FileCount))
+            {
+                //Only one file is supported. If multiple files present the last file overwrites the previous one.
+                Stream stream = file.OpenReadStream();
+
+                bool success = await uploadFile(fileSpace, file.Name, stream);
+            }
+        }
+    }
+
+    private async Task fileSpaceChanged(ChangeEventArgs eventArgs)
+    {
+        fileSpace = eventArgs.Value.ToString();
+
+        await getFiles(fileSpace);
+    }
+
+    private async Task copyToClipboard(string textToCopy)
+    {
+        await JSRuntime.InvokeVoidAsync("CopyToClipboard", textToCopy);
+    }
+
+    #endregion ///////////////////////////////////////////////////////////////////////
+
+
+    #region Persistence //////////////////////////////////////////////////////////////
+
+    string backendBaseURL = "http://localhost:7015/api";
+
+    private async Task<bool> deleteBlobFile(string fileId)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Delete, backendBaseURL + "/DeleteFile")
+            {
+                Headers = { { "FileSpace", fileSpace }, { "FileId", fileId } }
+            };
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (content == "true")
+            {
+                await getFiles(fileSpace);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+    
+    private async Task<bool> uploadFile(string fileSpace, string fileName, Stream stream)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, backendBaseURL + "/UploadFiles")
+        {
+            Content = new StreamContent(stream),
+            Headers = { { "FileSpace", fileSpace }, { "FileName" , fileName } }
+        };
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+
+            if (content == "true")
+            {
+                await getFiles(fileSpace);
+                
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private async Task getFiles(string fileSpace)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, backendBaseURL + "/GetFiles")
+        {
+            Headers = { { "FileSpace", fileSpace } }
+        };
+
+        var response = await client.SendAsync(request);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+
+            var receivedFiles = JsonSerializer.Deserialize<List<CloudFile>>(content);
+
+            if (receivedFiles is not null)
+                files = receivedFiles;
+        }
+    }
+
+    #endregion ////////////////////////////////////////////////////////////////////////
+}
